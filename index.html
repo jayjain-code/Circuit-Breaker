@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Circuit Breaker: The Glitch</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --bg-dark: #050505;
+            --neon-blue: #00f3ff;
+            --neon-pink: #ff00ff;
+            --neon-yellow: #ffee00;
+            --neon-red: #ff3333;
+            --grid-line: #1a1a1a;
+        }
+
+        body {
+            font-family: 'Roboto Mono', monospace;
+            background-color: var(--bg-dark);
+            color: #e0e0e0;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        h1, h2, h3 {
+            font-family: 'Orbitron', sans-serif;
+        }
+
+        /* Canvas Effects */
+        canvas {
+            background-color: #0a0a0a;
+            box-shadow: 0 0 20px rgba(0, 243, 255, 0.1);
+            border: 1px solid #333;
+            image-rendering: crisp-edges;
+        }
+
+        /* Glitch Animation for text */
+        .glitch-text {
+            position: relative;
+            animation: glitch-skew 1s infinite linear alternate-reverse;
+        }
+        .glitch-text::before, .glitch-text::after {
+            content: attr(data-text);
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        .glitch-text::before {
+            left: 2px;
+            text-shadow: -2px 0 #ff00c1;
+            clip: rect(44px, 450px, 56px, 0);
+            animation: glitch-anim 5s infinite linear alternate-reverse;
+        }
+        .glitch-text::after {
+            left: -2px;
+            text-shadow: -2px 0 #00fff9;
+            clip: rect(44px, 450px, 56px, 0);
+            animation: glitch-anim2 5s infinite linear alternate-reverse;
+        }
+
+        @keyframes glitch-anim {
+            0% { clip: rect(18px, 9999px, 86px, 0); }
+            20% { clip: rect(6px, 9999px, 3px, 0); }
+            40% { clip: rect(72px, 9999px, 21px, 0); }
+            60% { clip: rect(4px, 9999px, 68px, 0); }
+            80% { clip: rect(35px, 9999px, 96px, 0); }
+            100% { clip: rect(93px, 9999px, 14px, 0); }
+        }
+        @keyframes glitch-anim2 {
+            0% { clip: rect(25px, 9999px, 96px, 0); }
+            20% { clip: rect(11px, 9999px, 4px, 0); }
+            40% { clip: rect(31px, 9999px, 64px, 0); }
+            60% { clip: rect(89px, 9999px, 2px, 0); }
+            80% { clip: rect(4px, 9999px, 26px, 0); }
+            100% { clip: rect(62px, 9999px, 11px, 0); }
+        }
+
+        /* UI Components */
+        .panel {
+            background: rgba(20, 20, 20, 0.9);
+            border: 1px solid #333;
+            backdrop-filter: blur(5px);
+        }
+
+        .game-btn {
+            background: linear-gradient(45deg, #003333, #001111);
+            border: 1px solid var(--neon-blue);
+            color: var(--neon-blue);
+            transition: all 0.2s;
+        }
+        .game-btn:hover {
+            background: var(--neon-blue);
+            color: black;
+            box-shadow: 0 0 15px var(--neon-blue);
+        }
+        
+        .game-btn-cheat {
+             background: linear-gradient(45deg, #333300, #111100);
+             border: 1px solid var(--neon-yellow);
+             color: var(--neon-yellow);
+        }
+        .game-btn-cheat:hover {
+             background: var(--neon-yellow);
+             color: black;
+             box-shadow: 0 0 15px var(--neon-yellow);
+        }
+
+        /* Modal */
+        .modal-overlay {
+            background-color: rgba(0,0,0,0.85);
+            backdrop-filter: blur(4px);
+        }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col items-center justify-center p-4">
+
+    <!-- Header -->
+    <header class="w-full max-w-5xl flex justify-between items-center mb-4 z-10">
+        <div class="flex items-center gap-3">
+            <i class="fas fa-bolt text-3xl text-[var(--neon-yellow)] animate-pulse"></i>
+            <div>
+                <h1 class="text-3xl font-bold tracking-wider text-white glitch-text" data-text="CIRCUIT BREAKER">CIRCUIT BREAKER</h1>
+                <p class="text-xs text-[var(--neon-blue)] opacity-80">SYSTEM INTEGRITY: COMPROMISED</p>
+            </div>
+        </div>
+        <div class="flex gap-2">
+            <select id="diffSelect" class="game-btn px-4 py-2 font-bold uppercase tracking-widest text-sm rounded-sm bg-black outline-none cursor-pointer">
+                <option value="6">Easy (6x6)</option>
+                <option value="8" selected>Medium (8x8)</option>
+                <option value="12">Hard (12x12)</option>
+            </select>
+            <button id="resetBtn" class="game-btn px-6 py-2 font-bold uppercase tracking-widest text-sm rounded-sm">
+                Reboot
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Grid Layout -->
+    <main class="w-full max-w-5xl flex flex-col md:flex-row gap-6 h-auto md:h-[80vh] z-10">
+        
+        <!-- Sidebar / HUD -->
+        <aside class="w-full md:w-64 flex flex-col gap-4">
+            <!-- Turn Status -->
+            <div id="turnPanel" class="panel p-4 rounded-sm border-l-4 border-[var(--neon-blue)] transition-colors duration-300">
+                <h2 class="text-sm text-gray-400 mb-1">CURRENT STATUS</h2>
+                <div id="turnIndicator" class="text-xl font-bold text-[var(--neon-blue)]">PLAYER INPUT</div>
+            </div>
+
+            <!-- Decryption Tools (Solutions Tab) -->
+            <div class="panel p-4 rounded-sm border-r-4 border-[var(--neon-yellow)]">
+                 <h2 class="text-sm text-[var(--neon-yellow)] mb-2 flex items-center gap-2">
+                    <i class="fas fa-unlock"></i> DECRYPTION TOOLS
+                </h2>
+                <button id="solveBtn" class="game-btn-cheat w-full py-2 font-bold uppercase tracking-wider text-xs rounded-sm mb-1 transition-all">
+                    <i class="fas fa-eye mr-1"></i> Peek Solution
+                </button>
+                <p class="text-[10px] text-gray-500 text-center">Toggles Preview Mode (Input Locked)</p>
+            </div>
+
+            <!-- Glitch Log -->
+            <div class="panel flex-grow p-4 rounded-sm flex flex-col relative overflow-hidden">
+                <div class="absolute top-0 left-0 w-full h-1 bg-[var(--neon-pink)] opacity-50"></div>
+                <h2 class="text-sm text-[var(--neon-pink)] mb-2 flex items-center gap-2">
+                    <i class="fas fa-bug"></i> THREAT LOG
+                </h2>
+                <div id="glitchLog" class="flex-grow overflow-y-auto text-xs font-mono space-y-2 max-h-[150px] md:max-h-full scrollbar-thin scrollbar-thumb-gray-700">
+                    <div class="text-gray-500">>> Connection initialized...</div>
+                </div>
+            </div>
+            
+            <!-- Instructions -->
+            <div class="panel p-4 text-xs text-gray-400">
+                <p class="mb-2"><span class="text-white font-bold">GOAL:</span> Connect Green Source to Yellow Output.</p>
+                <p class="mb-2"><span class="text-white font-bold">ACTION:</span> Click tiles to rotate.</p>
+                <p><span class="text-[var(--neon-red)] font-bold">WARNING:</span> The Glitch will sabotage your path.</p>
+            </div>
+        </aside>
+
+        <!-- Game Board -->
+        <div class="flex-grow flex items-center justify-center panel p-1 md:p-4 rounded-sm relative">
+            <canvas id="gameCanvas" width="600" height="600" class="max-w-full h-auto shadow-2xl"></canvas>
+            
+            <!-- Overlay for dramatic effects -->
+            <div id="glitchOverlay" class="absolute inset-0 pointer-events-none opacity-0 transition-opacity duration-100 bg-red-500/10 mix-blend-overlay"></div>
+        </div>
+
+    </main>
+
+    <!-- Game Over Modal -->
+    <div id="modal" class="fixed inset-0 modal-overlay z-50 hidden flex items-center justify-center">
+        <div class="bg-black border border-[var(--neon-blue)] p-8 max-w-md w-full text-center shadow-[0_0_50px_rgba(0,243,255,0.2)]">
+            <h2 id="modalTitle" class="text-4xl font-bold mb-4 text-white">SYSTEM ONLINE</h2>
+            <p id="modalMsg" class="text-gray-300 mb-8 font-mono">Power rerouted successfully.</p>
+            <button id="modalBtn" class="game-btn w-full py-4 font-bold text-lg">INITIALIZE NEW RUN</button>
+        </div>
+    </div>
+
+<script>
+    /**
+     * CIRCUIT BREAKER
+     * Architecture: V1-style Random Generation + Path Patcher (for solution).
+     */
+
+    // --- CONFIGURATION ---
+    let GRID_SIZE = 8;
+    const CANVAS_SIZE = 600;
+    let TILE_SIZE = CANVAS_SIZE / GRID_SIZE;
+    
+    // Tile Types: 0:Straight, 1:Elbow, 2:Tee, 3:Cross
+    const TYPES = { STRAIGHT: 0, ELBOW: 1, TEE: 2, CROSS: 3 };
+
+    // Connection Masks (Rot=0): N=1, E=2, S=4, W=8
+    const MASKS = {
+        [TYPES.STRAIGHT]: 0b0101, // 5
+        [TYPES.ELBOW]:    0b0011, // 3
+        [TYPES.TEE]:      0b0111, // 7
+        [TYPES.CROSS]:    0b1111  // 15
+    };
+
+    // --- STATE ---
+    let canvas, ctx;
+    let grid = []; 
+    let gameState = 'PLAYER_TURN'; 
+    let turnCount = 0;
+    let isShowingSolution = false;
+    let savedGridState = null;
+    const ui = {};
+
+    // --- INITIALIZATION ---
+
+    window.onload = function() {
+        canvas = document.getElementById('gameCanvas');
+        ctx = canvas.getContext('2d');
+
+        ui.diffSelect = document.getElementById('diffSelect');
+        ui.turnIndicator = document.getElementById('turnIndicator');
+        ui.turnPanel = document.getElementById('turnPanel');
+        ui.log = document.getElementById('glitchLog');
+        ui.resetBtn = document.getElementById('resetBtn');
+        ui.solveBtn = document.getElementById('solveBtn');
+        ui.modal = document.getElementById('modal');
+        ui.modalTitle = document.getElementById('modalTitle');
+        ui.modalMsg = document.getElementById('modalMsg');
+        ui.modalBtn = document.getElementById('modalBtn');
+        ui.glitchOverlay = document.getElementById('glitchOverlay');
+
+        canvas.addEventListener('mousedown', handleInput);
+        // Fix for mobile touch interaction
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault(); 
+            handleInput(e.touches[0]);
+        }, {passive: false});
+
+        ui.diffSelect.addEventListener('change', (e) => {
+            GRID_SIZE = parseInt(e.target.value);
+            TILE_SIZE = CANVAS_SIZE / GRID_SIZE;
+            e.target.blur(); // Remove focus so it doesn't interfere
+            initGame();
+        });
+
+        ui.resetBtn.addEventListener('click', () => {
+            if(confirm("Reboot system?")) initGame();
+        });
+        ui.solveBtn.addEventListener('click', toggleSolution);
+        ui.modalBtn.addEventListener('click', initGame);
+
+        initGame();
+        requestAnimationFrame(renderLoop);
+    };
+
+    function initGame() {
+        grid = [];
+        turnCount = 0;
+        gameState = 'PLAYER_TURN';
+        isShowingSolution = false;
+        savedGridState = null;
+        
+        // Reset UI
+        ui.solveBtn.innerHTML = '<i class="fas fa-eye mr-1"></i> Peek Solution';
+        ui.solveBtn.classList.remove('border-red-500', 'text-red-500');
+        ui.modal.classList.add('hidden');
+        log(`System Rebooted. Grid: ${GRID_SIZE}x${GRID_SIZE}`, "text-[var(--neon-blue)]");
+        updateTurnUI();
+
+        // 1. Fully Random Generation (V1 Style)
+        for(let y=0; y<GRID_SIZE; y++) {
+            let row = [];
+            for(let x=0; x<GRID_SIZE; x++) {
+                row.push(createRandomTile(x, y));
+            }
+            grid.push(row);
+        }
+
+        // 2. Setup Source/Sink
+        let source = grid[0][0];
+        let sink = grid[GRID_SIZE-1][GRID_SIZE-1];
+        source.isSource = true;
+        sink.isSink = true;
+        // Lock only Start and End
+        source.locked = 999;
+        sink.locked = 999;
+
+        // 3. Patch a Solution Path (Invisible fix)
+        // This ensures the button works, without changing the chaos of V1 generation too much
+        generateSolvablePath(source, sink);
+
+        // 4. Initial Power Calculation
+        calculatePower();
+    }
+
+    function createRandomTile(x, y) {
+        const rand = Math.random();
+        let type = TYPES.STRAIGHT;
+        // Biased random like V1
+        if(rand > 0.4) type = TYPES.ELBOW;
+        if(rand > 0.75) type = TYPES.TEE;
+        if(rand > 0.95) type = TYPES.CROSS;
+
+        return {
+            x, y,
+            type,
+            rotation: Math.floor(Math.random() * 4),
+            solutionRotation: 0, // Will be set by path patcher
+            locked: 0,
+            powered: false,
+            isSource: false,
+            isSink: false
+        };
+    }
+
+    // --- SOLUTION GENERATOR (Path Patcher) ---
+    function generateSolvablePath(source, sink) {
+        // Reset flags
+        for(let row of grid) for(let t of row) t.onPath = false;
+
+        let curr = source;
+        curr.onPath = true;
+        let path = [curr];
+
+        // Random walk to sink
+        let attempts = 0;
+        while(curr !== sink && attempts < 200) {
+            let neighbors = getNeighbors(curr);
+            let valid = neighbors.filter(n => !n.onPath);
+            
+            if(valid.length === 0) {
+                // Backtrack simplified: just reset if stuck (lazy generator)
+                // For this grid size, restarts are cheap
+                return initGame(); // Nuke and retry if generation fails (rare)
+            }
+            
+            curr = valid[Math.floor(Math.random() * valid.length)];
+            curr.onPath = true;
+            path.push(curr);
+            attempts++;
+        }
+
+        // Now Force types along the path to connect
+        for(let i=0; i<path.length; i++) {
+            let t = path[i];
+            let prev = i > 0 ? path[i-1] : null;
+            let next = i < path.length - 1 ? path[i+1] : null;
+            
+            configureTileForSolution(t, prev, next);
+        }
+
+        // Randomly set solutionRotation for non-path tiles so they don't look weird
+        for(let row of grid) for(let t of row) {
+            if(!t.onPath) t.solutionRotation = Math.floor(Math.random() * 4);
+        }
+    }
+
+    function configureTileForSolution(tile, prev, next) {
+        let reqDirs = [];
+        if(prev) reqDirs.push(getDir(tile, prev));
+        if(next) reqDirs.push(getDir(tile, next));
+        
+        // Ensure Source connects to next
+        if(!prev && next) reqDirs.push((getDir(tile, next) + 1) % 4); 
+        // Ensure Sink connects to prev
+        if(prev && !next) reqDirs.push((getDir(tile, prev) + 1) % 4);
+
+        // Calculate mask
+        let mask = 0;
+        for(let d of reqDirs) mask |= (1 << d);
+
+        // Find a valid rotation for the CURRENT type if possible, else change type
+        let bestType = tile.type;
+        let bestRot = -1;
+
+        // Try to keep current random type first (V1 feel)
+        for(let r=0; r<4; r++) {
+            if((getRotatedMask(tile.type, r) & mask) === mask) {
+                bestRot = r;
+                break;
+            }
+        }
+
+        // If current type can't support connections (e.g. Straight on a corner), upgrade it
+        if(bestRot === -1) {
+            // Upgrade to TEE or CROSS as they are versatile
+            bestType = TYPES.TEE;
+            for(let r=0; r<4; r++) {
+                if((getRotatedMask(bestType, r) & mask) === mask) {
+                    bestRot = r;
+                    break;
+                }
+            }
+        }
+        
+        // Final fallback to Cross
+        if(bestRot === -1) {
+            bestType = TYPES.CROSS;
+            bestRot = 0;
+        }
+
+        tile.type = bestType;
+        tile.solutionRotation = bestRot;
+        
+        // Note: We do NOT set tile.rotation = bestRot. Game starts scrambled.
+        // Except for Source/Sink which should start solved or be obvious
+        if(tile.isSource || tile.isSink) {
+            tile.rotation = bestRot;
+        }
+    }
+
+    function getNeighbors(tile) {
+        let res = [];
+        const dirs = [[0,-1], [1,0], [0,1], [-1,0]];
+        for(let d of dirs) {
+            let nx = tile.x + d[0];
+            let ny = tile.y + d[1];
+            if(nx>=0 && nx<GRID_SIZE && ny>=0 && ny<GRID_SIZE) res.push(grid[ny][nx]);
+        }
+        return res;
+    }
+    
+    function getDir(from, to) {
+        if(to.y < from.y) return 0; // N
+        if(to.x > from.x) return 1; // E
+        if(to.y > from.y) return 2; // S
+        if(to.x < from.x) return 3; // W
+        return 0;
+    }
+
+    // --- INPUT & LOGIC ---
+
+    function handleInput(e) {
+        // PREVIEW MODE GUARD: This is likely why you couldn't toggle tiles before.
+        // We block input so you don't accidentally move tiles while "Cheating".
+        if(isShowingSolution) {
+            triggerGlitchEffect(100); // Feedback that input is blocked
+            return;
+        }
+        if(gameState !== 'PLAYER_TURN') return;
+
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        const x = Math.floor(((e.clientX - rect.left) * scaleX) / TILE_SIZE);
+        const y = Math.floor(((e.clientY - rect.top) * scaleY) / TILE_SIZE);
+
+        if(x >= 0 && x < GRID_SIZE && y >= 0 && y < GRID_SIZE) {
+            rotateTile(x, y);
+        }
+    }
+
+    function rotateTile(x, y) {
+        const tile = grid[y][x];
+
+        if(tile.locked > 0) {
+            triggerGlitchEffect(50);
+            log("ERROR: Tile Locked.", "text-[var(--neon-red)]");
+            return;
+        }
+
+        tile.rotation = (tile.rotation + 1) % 4;
+        
+        if(calculatePower()) {
+            endGame(true);
+            return;
+        }
+        
+        endPlayerTurn();
+    }
+
+    function toggleSolution() {
+        if(gameState === 'GAME_OVER') return;
+        
+        if(!isShowingSolution) {
+            // Save current state
+            savedGridState = grid.map(row => row.map(t => ({
+                rotation: t.rotation,
+                locked: t.locked
+            })));
+
+            // Apply Solution
+            for(let row of grid) for(let t of row) {
+                 t.rotation = t.solutionRotation;
+                 t.locked = 0; // Visual unlock
+            }
+            
+            isShowingSolution = true;
+            ui.solveBtn.innerHTML = '<i class="fas fa-eye-slash mr-1"></i> Hide Solution';
+            ui.solveBtn.classList.add('border-red-500', 'text-red-500');
+            log("PREVIEW MODE ACTIVE - INPUT LOCKED", "text-[var(--neon-yellow)]");
+        } else {
+            // Restore state
+            if (savedGridState) {
+                for(let y=0; y<GRID_SIZE; y++) {
+                    for(let x=0; x<GRID_SIZE; x++) {
+                        grid[y][x].rotation = savedGridState[y][x].rotation;
+                        grid[y][x].locked = savedGridState[y][x].locked;
+                    }
+                }
+            }
+            
+            isShowingSolution = false;
+            ui.solveBtn.innerHTML = '<i class="fas fa-eye mr-1"></i> Peek Solution';
+            ui.solveBtn.classList.remove('border-red-500', 'text-red-500');
+            log("Preview Ended.", "text-gray-500");
+        }
+        calculatePower();
+    }
+
+    function endPlayerTurn() {
+        gameState = 'GLITCH_ACTING';
+        updateTurnUI();
+        setTimeout(glitchTurn, 600);
+    }
+
+    function glitchTurn() {
+        if(gameState === 'GAME_OVER') return;
+
+        // Decrement locks
+        for(let row of grid) for(let t of row) {
+            if(t.locked > 0 && !t.isSource && !t.isSink) t.locked--;
+        }
+
+        // Glitch Action
+        let candidates = [];
+        for(let row of grid) for(let t of row) {
+            if(!t.isSource && !t.isSink) candidates.push(t);
+        }
+
+        if(candidates.length > 0) {
+            const target = candidates[Math.floor(Math.random() * candidates.length)];
+            const action = Math.random();
+
+            if(action < 0.6) {
+                target.rotation = (target.rotation + 1 + Math.floor(Math.random()*3)) % 4;
+                log(`GLITCH: Randomized [${target.x},${target.y}]`, "text-[var(--neon-pink)]");
+            } else {
+                target.locked = 3;
+                log(`GLITCH: Locked [${target.x},${target.y}]`, "text-[var(--neon-red)]");
+            }
+            triggerGlitchEffect();
+        }
+
+        calculatePower();
+        gameState = 'PLAYER_TURN';
+        turnCount++;
+        updateTurnUI();
+    }
+
+    // --- BFS POWER LOGIC ---
+    function getRotatedMask(type, rot) {
+        let base = MASKS[type];
+        let mask = 0;
+        if(base & 1) mask |= (1 << ((0 + rot)%4));
+        if(base & 2) mask |= (1 << ((1 + rot)%4));
+        if(base & 4) mask |= (1 << ((2 + rot)%4));
+        if(base & 8) mask |= (1 << ((3 + rot)%4));
+        return mask;
+    }
+
+    function calculatePower() {
+        for(let row of grid) for(let t of row) t.powered = false;
+
+        let queue = [grid[0][0]];
+        grid[0][0].powered = true;
+        let reachedSink = false;
+        
+        while(queue.length > 0) {
+            let curr = queue.shift();
+            let currMask = getRotatedMask(curr.type, curr.rotation);
+
+            // N(1)-S(4), E(2)-W(8), S(4)-N(1), W(8)-E(2)
+            const dirs = [
+                { dx: 0, dy: -1, bit: 1, opp: 4 }, 
+                { dx: 1, dy: 0,  bit: 2, opp: 8 }, 
+                { dx: 0, dy: 1,  bit: 4, opp: 1 }, 
+                { dx: -1, dy: 0, bit: 8, opp: 2 }  
+            ];
+
+            for(let d of dirs) {
+                if(currMask & d.bit) {
+                    let nx = curr.x + d.dx;
+                    let ny = curr.y + d.dy;
+                    if(nx>=0 && nx<GRID_SIZE && ny>=0 && ny<GRID_SIZE) {
+                        let neighbor = grid[ny][nx];
+                        let neighborMask = getRotatedMask(neighbor.type, neighbor.rotation);
+                        if(!neighbor.powered && (neighborMask & d.opp)) {
+                            neighbor.powered = true;
+                            queue.push(neighbor);
+                            if(neighbor.isSink) reachedSink = true;
+                        }
+                    }
+                }
+            }
+        }
+        return reachedSink;
+    }
+
+    // --- RENDERING ---
+
+    function renderLoop() {
+        ctx.fillStyle = '#0a0a0a';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Grid
+        ctx.strokeStyle = '#111';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        for(let i=0; i<=GRID_SIZE; i++) {
+            ctx.moveTo(i*TILE_SIZE, 0); ctx.lineTo(i*TILE_SIZE, canvas.height);
+            ctx.moveTo(0, i*TILE_SIZE); ctx.lineTo(canvas.width, i*TILE_SIZE);
+        }
+        ctx.stroke();
+
+        for(let row of grid) for(let t of row) drawTile(t);
+
+        // Overlay for Preview Mode
+        if(isShowingSolution) {
+             ctx.save();
+             ctx.fillStyle = "rgba(255, 238, 0, 0.05)";
+             ctx.fillRect(0,0,canvas.width, canvas.height);
+             
+             ctx.font = "bold 20px 'Orbitron'";
+             ctx.fillStyle = "rgba(255, 238, 0, 0.8)";
+             ctx.textAlign = "center";
+             ctx.fillText("PREVIEW MODE - INPUT LOCKED", canvas.width/2, canvas.height - 20);
+             ctx.restore();
+        }
+
+        requestAnimationFrame(renderLoop);
+    }
+
+    function drawTile(tile) {
+        const cx = tile.x * TILE_SIZE + TILE_SIZE/2;
+        const cy = tile.y * TILE_SIZE + TILE_SIZE/2;
+        
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(tile.rotation * Math.PI / 2);
+
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        
+        if(tile.powered) {
+            ctx.strokeStyle = tile.isSink ? '#ffee00' : '#00f3ff';
+            ctx.lineWidth = 6;
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = ctx.strokeStyle;
+        } else {
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 4;
+            ctx.shadowBlur = 0;
+        }
+
+        ctx.beginPath();
+        switch(tile.type) {
+            case TYPES.STRAIGHT:
+                ctx.moveTo(0, -TILE_SIZE/2); ctx.lineTo(0, TILE_SIZE/2);
+                break;
+            case TYPES.ELBOW:
+                ctx.moveTo(0, -TILE_SIZE/2); ctx.lineTo(0, 0); ctx.lineTo(TILE_SIZE/2, 0);
+                break;
+            case TYPES.TEE:
+                ctx.moveTo(0, -TILE_SIZE/2); ctx.lineTo(0, TILE_SIZE/2); ctx.moveTo(0, 0); ctx.lineTo(TILE_SIZE/2, 0);
+                break;
+            case TYPES.CROSS:
+                ctx.moveTo(0, -TILE_SIZE/2); ctx.lineTo(0, TILE_SIZE/2); ctx.moveTo(-TILE_SIZE/2, 0); ctx.lineTo(TILE_SIZE/2, 0);
+                break;
+        }
+        ctx.stroke();
+
+        ctx.fillStyle = ctx.strokeStyle;
+        ctx.beginPath(); ctx.arc(0, 0, 4, 0, Math.PI*2); ctx.fill();
+        ctx.restore();
+
+        // Lock & Icons
+        if(tile.locked > 0) {
+            ctx.fillStyle = 'rgba(0,0,0,0.8)';
+            ctx.fillRect(tile.x*TILE_SIZE+2, tile.y*TILE_SIZE+2, TILE_SIZE-4, TILE_SIZE-4);
+            ctx.font = '24px FontAwesome';
+            ctx.fillStyle = '#ff3333';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('\uf023', cx, cy);
+            ctx.font = '12px monospace';
+            ctx.fillStyle = '#fff';
+            ctx.fillText(tile.locked, cx + 15, cy - 15);
+        }
+        if(tile.isSource) drawLabel(cx, cy, "SRC", "#00f3ff");
+        if(tile.isSink) drawLabel(cx, cy, "OUT", "#ffee00");
+    }
+
+    function drawLabel(x, y, text, color) {
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = 'rgba(0,0,0,0.8)';
+        ctx.fillRect(x - 15, y - 15, 30, 30);
+        ctx.font = 'bold 10px monospace';
+        ctx.fillStyle = color;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(text, x, y);
+    }
+
+    function updateTurnUI() {
+        if(gameState === 'PLAYER_TURN') {
+            ui.turnIndicator.innerText = "PLAYER INPUT";
+            ui.turnIndicator.className = "text-xl font-bold text-[var(--neon-blue)] glitch-text";
+            ui.turnPanel.style.borderColor = "var(--neon-blue)";
+        } else {
+            ui.turnIndicator.innerText = "GLITCH ACTING...";
+            ui.turnIndicator.className = "text-xl font-bold text-[var(--neon-red)] animate-pulse";
+            ui.turnPanel.style.borderColor = "var(--neon-red)";
+        }
+    }
+
+    function log(msg, colorClass) {
+        const div = document.createElement('div');
+        div.className = `${colorClass} mb-1 border-l-2 border-current pl-2`;
+        div.innerHTML = `<span class="opacity-50">[T${turnCount}]</span> ${msg}`;
+        ui.log.prepend(div);
+    }
+
+    function triggerGlitchEffect(duration = 200) {
+        ui.glitchOverlay.style.opacity = '1';
+        setTimeout(() => ui.glitchOverlay.style.opacity = '0', duration);
+        canvas.style.transform = `translate(${Math.random()*4-2}px, ${Math.random()*4-2}px)`;
+        setTimeout(() => canvas.style.transform = 'translate(0,0)', 100);
+    }
+
+    function endGame(win) {
+        gameState = 'GAME_OVER';
+        ui.modal.classList.remove('hidden');
+        if(win) {
+            ui.modalTitle.innerText = "SYSTEM RESTORED";
+            ui.modalTitle.style.color = "var(--neon-blue)";
+            ui.modalMsg.innerText = `Solved in ${turnCount} turns.`;
+        } else {
+            ui.modalTitle.innerText = "SYSTEM FAILURE";
+            ui.modalTitle.style.color = "var(--neon-red)";
+        }
+    }
+</script>
+</body>
+</html>
