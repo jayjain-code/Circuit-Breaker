@@ -200,7 +200,198 @@
     /**
      * CIRCUIT BREAKER
      * Architecture: V1-style Random Generation + Path Patcher (for solution).
+     * Enhanced with Sound Effects and Haptic Feedback
      */
+
+    // --- AUDIO SYSTEM ---
+    const AudioEngine = {
+        context: null,
+        sounds: {},
+        
+        init() {
+            try {
+                this.context = new (window.AudioContext || window.webkitAudioContext)();
+                this.createSounds();
+            } catch(e) {
+                console.warn('Audio not supported', e);
+            }
+        },
+        
+        createSounds() {
+            // Rotate tile sound - mechanical click
+            this.sounds.rotate = () => {
+                const osc = this.context.createOscillator();
+                const gain = this.context.createGain();
+                osc.connect(gain);
+                gain.connect(this.context.destination);
+                
+                osc.frequency.value = 800;
+                gain.gain.value = 0.1;
+                
+                osc.start();
+                gain.gain.exponentialRampToValueAtTime(0.01, this.context.currentTime + 0.05);
+                osc.stop(this.context.currentTime + 0.05);
+            };
+            
+            // Power flow sound - electrical hum
+            this.sounds.power = () => {
+                const osc = this.context.createOscillator();
+                const gain = this.context.createGain();
+                osc.connect(gain);
+                gain.connect(this.context.destination);
+                
+                osc.type = 'sine';
+                osc.frequency.value = 120;
+                gain.gain.value = 0.05;
+                
+                osc.start();
+                gain.gain.exponentialRampToValueAtTime(0.01, this.context.currentTime + 0.2);
+                osc.stop(this.context.currentTime + 0.2);
+            };
+            
+            // Glitch sound - harsh digital noise
+            this.sounds.glitch = () => {
+                const osc1 = this.context.createOscillator();
+                const osc2 = this.context.createOscillator();
+                const gain = this.context.createGain();
+                
+                osc1.connect(gain);
+                osc2.connect(gain);
+                gain.connect(this.context.destination);
+                
+                osc1.type = 'sawtooth';
+                osc2.type = 'square';
+                osc1.frequency.value = 200 + Math.random() * 300;
+                osc2.frequency.value = 150 + Math.random() * 250;
+                gain.gain.value = 0.15;
+                
+                osc1.start();
+                osc2.start();
+                gain.gain.exponentialRampToValueAtTime(0.01, this.context.currentTime + 0.15);
+                osc1.stop(this.context.currentTime + 0.15);
+                osc2.stop(this.context.currentTime + 0.15);
+            };
+            
+            // Lock sound - denied beep
+            this.sounds.lock = () => {
+                const osc = this.context.createOscillator();
+                const gain = this.context.createGain();
+                osc.connect(gain);
+                gain.connect(this.context.destination);
+                
+                osc.type = 'square';
+                osc.frequency.value = 300;
+                gain.gain.value = 0.08;
+                
+                osc.start();
+                osc.frequency.exponentialRampToValueAtTime(200, this.context.currentTime + 0.1);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.context.currentTime + 0.1);
+                osc.stop(this.context.currentTime + 0.1);
+            };
+            
+            // Victory sound - ascending arpeggio
+            this.sounds.victory = () => {
+                const notes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
+                notes.forEach((freq, i) => {
+                    setTimeout(() => {
+                        const osc = this.context.createOscillator();
+                        const gain = this.context.createGain();
+                        osc.connect(gain);
+                        gain.connect(this.context.destination);
+                        
+                        osc.type = 'sine';
+                        osc.frequency.value = freq;
+                        gain.gain.value = 0.15;
+                        
+                        osc.start();
+                        gain.gain.exponentialRampToValueAtTime(0.01, this.context.currentTime + 0.3);
+                        osc.stop(this.context.currentTime + 0.3);
+                    }, i * 100);
+                });
+            };
+            
+            // Boot sound - system startup
+            this.sounds.boot = () => {
+                const osc = this.context.createOscillator();
+                const gain = this.context.createGain();
+                osc.connect(gain);
+                gain.connect(this.context.destination);
+                
+                osc.type = 'sine';
+                osc.frequency.value = 100;
+                gain.gain.value = 0.1;
+                
+                osc.start();
+                osc.frequency.exponentialRampToValueAtTime(400, this.context.currentTime + 0.3);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.context.currentTime + 0.3);
+                osc.stop(this.context.currentTime + 0.3);
+            };
+            
+            // Preview mode toggle
+            this.sounds.preview = () => {
+                const osc = this.context.createOscillator();
+                const gain = this.context.createGain();
+                osc.connect(gain);
+                gain.connect(this.context.destination);
+                
+                osc.type = 'triangle';
+                osc.frequency.value = 600;
+                gain.gain.value = 0.08;
+                
+                osc.start();
+                gain.gain.exponentialRampToValueAtTime(0.01, this.context.currentTime + 0.15);
+                osc.stop(this.context.currentTime + 0.15);
+            };
+        },
+        
+        play(soundName) {
+            if (!this.context || !this.sounds[soundName]) return;
+            
+            // Resume context if suspended (mobile browsers)
+            if (this.context.state === 'suspended') {
+                this.context.resume();
+            }
+            
+            try {
+                this.sounds[soundName]();
+            } catch(e) {
+                console.warn('Sound playback error', e);
+            }
+        }
+    };
+
+    // --- HAPTIC SYSTEM ---
+    const HapticEngine = {
+        vibrate(pattern) {
+            if ('vibrate' in navigator) {
+                navigator.vibrate(pattern);
+            }
+        },
+        
+        light() {
+            this.vibrate(10);
+        },
+        
+        medium() {
+            this.vibrate(20);
+        },
+        
+        heavy() {
+            this.vibrate(30);
+        },
+        
+        success() {
+            this.vibrate([10, 50, 10, 50, 20]);
+        },
+        
+        error() {
+            this.vibrate([50, 30, 50]);
+        },
+        
+        glitch() {
+            this.vibrate([15, 10, 15, 10, 25]);
+        }
+    };
 
     // --- CONFIGURATION ---
     let GRID_SIZE = 8;
@@ -244,6 +435,20 @@
         ui.modalBtn = document.getElementById('modalBtn');
         ui.glitchOverlay = document.getElementById('glitchOverlay');
 
+        // Initialize audio
+        AudioEngine.init();
+        
+        // Enable audio on first user interaction
+        const enableAudio = () => {
+            if (AudioEngine.context && AudioEngine.context.state === 'suspended') {
+                AudioEngine.context.resume();
+            }
+            document.removeEventListener('click', enableAudio);
+            document.removeEventListener('touchstart', enableAudio);
+        };
+        document.addEventListener('click', enableAudio);
+        document.addEventListener('touchstart', enableAudio);
+
         canvas.addEventListener('mousedown', handleInput);
         canvas.addEventListener('touchstart', (e) => {
             e.preventDefault(); 
@@ -258,10 +463,16 @@
         });
 
         ui.resetBtn.addEventListener('click', () => {
-            if(confirm("Reboot system?")) initGame();
+            if(confirm("Reboot system?")) {
+                HapticEngine.medium();
+                initGame();
+            }
         });
         ui.solveBtn.addEventListener('click', toggleSolution);
-        ui.modalBtn.addEventListener('click', initGame);
+        ui.modalBtn.addEventListener('click', () => {
+            HapticEngine.light();
+            initGame();
+        });
 
         initGame();
         requestAnimationFrame(renderLoop);
@@ -279,6 +490,10 @@
         ui.modal.classList.add('hidden');
         log(`System Rebooted. Grid: ${GRID_SIZE}x${GRID_SIZE}`, "text-[var(--neon-blue)]");
         updateTurnUI();
+
+        // Play boot sound
+        AudioEngine.play('boot');
+        HapticEngine.medium();
 
         // 1. Fully Random Generation
         for(let y=0; y<GRID_SIZE; y++) {
@@ -427,12 +642,15 @@
     function handleInput(e) {
         // If game is won, any click shows the modal
         if(gameState === 'GAME_WON') {
+            HapticEngine.light();
             endGame(true);
             return;
         }
         
         if(isShowingSolution) {
             triggerGlitchEffect(100);
+            AudioEngine.play('lock');
+            HapticEngine.error();
             return;
         }
         if(gameState !== 'PLAYER_TURN') return;
@@ -454,23 +672,39 @@
         if(tile.locked > 0) {
             triggerGlitchEffect(50);
             log("ERROR: Tile Locked.", "text-[var(--neon-red)]");
+            AudioEngine.play('lock');
+            HapticEngine.error();
             return;
         }
 
         tile.rotation = (tile.rotation + 1) % 4;
         
+        // Play rotate sound and haptic
+        AudioEngine.play('rotate');
+        HapticEngine.light();
+        
         if(calculatePower()) {
             gameState = 'GAME_WON';
             updateTurnUI();
             log(`VICTORY! Solved in ${turnCount} turns.`, "text-[var(--neon-blue)]");
+            
+            // Victory feedback
+            AudioEngine.play('victory');
+            HapticEngine.success();
             return;
         }
+        
+        // Play power sound after rotation
+        AudioEngine.play('power');
         
         endPlayerTurn();
     }
 
     function toggleSolution() {
         if(gameState === 'GAME_OVER' || gameState === 'GAME_WON') return;
+        
+        AudioEngine.play('preview');
+        HapticEngine.medium();
         
         if(!isShowingSolution) {
             savedGridState = grid.map(row => row.map(t => ({
@@ -534,7 +768,11 @@
                 target.locked = 3;
                 log(`GLITCH: Locked [${target.x},${target.y}]`, "text-[var(--neon-red)]");
             }
+            
+            // Glitch feedback
             triggerGlitchEffect();
+            AudioEngine.play('glitch');
+            HapticEngine.glitch();
         }
 
         calculatePower();
